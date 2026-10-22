@@ -1,0 +1,1 @@
+oypp-display-fallback.woff2 — TeX Gyre Adventor 2.501(GUST e-foundry) 를 바탕으로 세로 지표를 AvantGarde Bk BT 에 맞추고(size-adjust 92.67% 기준) 라틴 문자만 남긴 파생 서체. 이름을 Oypp Display Fallback 으로 바꿨다. 라이선스: GUST Font License(같은 폴더 LICENSE 파일).
