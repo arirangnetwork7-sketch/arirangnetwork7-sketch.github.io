@@ -1,0 +1,1 @@
+{ "name": "The Oypp", "short_name": "The Oypp", "start_url": "/exhibition/", "scope": "/", "display": "standalone", "orientation": "landscape", "background_color": "#ff5800", "theme_color": "#ff5800", "icons": [{ "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }] }

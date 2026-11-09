@@ -1,0 +1,66 @@
+<!DOCTYPE html><html lang="ko" data-astro-cid-3lsxfo7j><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"><title>The Oypp</title><meta name="robots" content="noindex"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="The Oypp"><meta name="theme-color" content="#ff5800"><link rel="manifest" href="/exhibition/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><style>html,body{overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;background:#ff5800;height:100%;margin:0;overflow:hidden}video[data-astro-cid-3lsxfo7j]{object-fit:cover;background:#ff5800;width:100%;height:100%;position:fixed;inset:0}#bar[data-astro-cid-3lsxfo7j]{z-index:2;color:#000;margin:0;font:12px/1 -apple-system,sans-serif;position:fixed;bottom:12px;left:16px}iframe[data-astro-cid-3lsxfo7j]{opacity:0;background:#fbfbf7;border:0;width:100%;height:100%;transition:opacity .28s linear;position:fixed;inset:0}iframe[data-astro-cid-3lsxfo7j].on{opacity:1}
+</style></head><body data-astro-cid-3lsxfo7j><p id="bar" aria-hidden="true" data-astro-cid-3lsxfo7j></p><video id="v" muted playsinline webkit-playsinline loop autoplay preload="auto" disablepictureinpicture poster="/exhibition/poster.jpg" aria-label="디오이프를 소개하는 영상" data-astro-cid-3lsxfo7j></video><script>(function(){const FILMS = ["/exhibition/film-v3-00.bin","/exhibition/film-v3-01.bin"];
+const CACHE = "exh-v3";
+
+    (function () {
+      var v = document.getElementById('v'), bar = document.getElementById('bar'), IDLE = 45000;
+      var play = function () { var p = v.play(); if (p && p.catch) p.catch(function () {}); };
+      v.muted = true;
+      v.addEventListener('canplay', function () { if (!live) play(); });
+
+      // 영상은 통째로 받아 메모리에서 튼다 — 받아 둔 사본(Cache)이 있으면 네트워크를 쓰지 않는다. 처음 한 번만 조각을 차례로 받고, 왼쪽 아래 작은 숫자로 진행을 보인다
+      var done = 0, show = function () { bar.textContent = done < FILMS.length ? Math.round(done / FILMS.length * 100) + '%' : ''; };
+      var get = function (url, c) {
+        return (c ? c.match(url) : Promise.resolve(null)).then(function (hit) {
+          if (hit) return hit;
+          return fetch(url).then(function (r) {
+            if (!r.ok) throw new Error('film ' + r.status);
+            return c ? c.put(url, r.clone()).catch(function () {}).then(function () { return r; }) : r;
+          });
+        }).then(function (r) { return r.blob(); }).then(function (b) { done++; show(); return b; });
+      };
+      var load = function (tries) {
+        done = 0; show();
+        ('caches' in window ? caches.open(CACHE) : Promise.resolve(null)).then(function (c) {
+          var out = [], next = function (i) { return i >= FILMS.length ? out : get(FILMS[i], c).then(function (b) { out.push(b); return next(i + 1); }); };
+          return next(0);
+        }).then(function (parts) { v.src = URL.createObjectURL(new Blob(parts, { type: 'video/mp4' })); v.load(); play(); })
+          .catch(function () { setTimeout(function () { load((tries || 0) + 1); }, Math.min(30000, 3000 * ((tries || 0) + 1))); });   // 와이파이가 끊겼으면 다시 받는다
+      };
+      load(0);
+      if ('caches' in window) caches.keys().then(function (ks) { ks.forEach(function (k) { if (/^exh-v\d/.test(k) && k !== CACHE) caches.delete(k); }); });   // 옛 판 사본 지우기
+
+      // 화면 꺼짐 막기(자동 잠금 '안 함'과 함께 쓴다)
+      var lock = null, wake = function () { if (navigator.wakeLock && !lock && document.visibilityState === 'visible') navigator.wakeLock.request('screen').then(function (l) { lock = l; l.addEventListener('release', function () { lock = null; }); }).catch(function () {}); };
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { wake(); if (!live) play(); } });
+      wake();
+
+      // 진짜 사이트 — 만지면 위에 열리고, 손이 없으면 닫는다
+      var live = null, last = 0, poke = function () { last = Date.now(); };
+      var hook = function () { try { var w = live.contentWindow; ['pointerdown', 'touchstart', 'touchmove', 'scroll', 'keydown'].forEach(function (e) { w.addEventListener(e, poke, { passive: true, capture: true }); }); } catch (e) {} };
+      var close = function () { if (!live) return; live.remove(); live = null; play(); };
+      var open = function () {
+        if (live || navigator.onLine === false) return;
+        poke(); live = document.createElement('iframe'); live.src = '/?exhibit=1'; live.title = 'The Oypp';
+        live.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+        live.addEventListener('load', function () { poke(); hook(); live.classList.add('on'); v.pause(); });
+        document.body.appendChild(live);
+      };
+      v.addEventListener('pointerdown', function () { if (v.paused && !live) { play(); return; } open(); });
+
+      // 혼자 도는 동안의 안전 장치 — 멈추면 다시 틀고, 그래도 안 되면 새로 연다
+      var seen = -1, stuck = 0;
+      setInterval(function () {
+        wake();
+        if (live) { if (Date.now() - last > IDLE) close(); return; }
+        if (!v.currentSrc && !v.src) return;
+        if (v.paused) play();
+        if (v.currentTime === seen) stuck++; else stuck = 0;
+        seen = v.currentTime;
+        if (stuck === 4) { try { v.currentTime = 0; } catch (e) {} play(); }
+        if (stuck >= 10) location.reload();
+      }, 2000);
+
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/exhibition/sw.js').catch(function () {});
+    })();
+  })();</script></body></html>
