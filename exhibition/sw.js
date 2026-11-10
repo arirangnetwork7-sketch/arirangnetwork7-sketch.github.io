@@ -1,13 +1,51 @@
-// 전시 페이지 껍데기 — 와이파이가 끊긴 채 다시 열려도 뜨게. 영상은 페이지가 Cache 에 넣는다
-var C = 'exh-shell-v2';
-self.addEventListener('install', function (e) { self.skipWaiting(); e.waitUntil(caches.open(C).then(function (c) { return c.addAll(['/exhibition/', '/exhibition/poster.jpg']); })); });
-self.addEventListener('activate', function (e) { e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k.indexOf('exh-shell-') === 0 && k !== C; }).map(function (k) { return caches.delete(k); })); }).then(function () { return self.clients.claim(); })); });
+// 전시 페이지 — 한 번 받은 페이지 · 그림 · 서체를 아이패드에 두고 쓴다. 와이파이가 끊기거나 느려져도 다음 바퀴가 그대로 돈다(11-10 서준 "최종 완성상태는 아이패드가 무선 상태에서 원활하게 돌아가는 것").
+// 페이지(/exhibition/ · /exhibition/about/): 네트워크 먼저, 4초 안에 안 오거나 끊기면 저장본 — 새 판은 받히는 대로 바뀐다.
+// /_astro/(이름에 해시가 붙어 바뀌지 않는다): 저장본 먼저. 그림 · 서체 · 아이콘: 저장본 먼저, 뒤에서 새로 받아 둔다.
+var SHELL = 'exh-shell-v3', ASSETS = 'exh-assets-v1';
+var PAGES = ['/exhibition/', '/exhibition/about/'];
+
+self.addEventListener('install', function (e) {
+  self.skipWaiting();
+  e.waitUntil(caches.open(SHELL).then(function (c) { return Promise.all(PAGES.map(function (u) { return c.add(new Request(u, { cache: 'reload' })).catch(function () {}); })); }));
+});
+self.addEventListener('activate', function (e) {
+  e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return /^exh-/.test(k) && k !== SHELL && k !== ASSETS; }).map(function (k) { return caches.delete(k); })); })
+    .then(function () { return self.clients.claim(); }));
+});
+
+var pageKey = function (u) { return u.pathname.replace(/\/?$/, '/'); };   // ?k=1 · ?kt= 같은 꼬리는 떼고 한 벌만 둔다
+function networkFirst(req, key) {
+  return new Promise(function (resolve) {
+    var done = false;
+    var fallback = function () { return caches.match(key).then(function (r) { if (!done && r) { done = true; resolve(r); } return r; }); };
+    var timer = setTimeout(fallback, 4000);
+    fetch(req).then(function (r) {
+      if (r && r.ok) { var copy = r.clone(); caches.open(SHELL).then(function (c) { return c.put(key, copy); }).catch(function () {}); }
+      if (!done) { done = true; clearTimeout(timer); resolve(r); }
+    }, function () {
+      clearTimeout(timer);
+      fallback().then(function (r) { if (!done) { done = true; resolve(r || Response.error()); } });
+    });
+  });
+}
+function cacheFirst(req, revalidate) {
+  return caches.open(ASSETS).then(function (c) {
+    return c.match(req).then(function (hit) {
+      var net = fetch(req).then(function (r) { if (r && (r.ok || r.type === 'opaque')) c.put(req, r.clone()).catch(function () {}); return r; });
+      if (hit) { if (revalidate) net.catch(function () {}); return hit; }
+      return net;
+    });
+  });
+}
+
 self.addEventListener('fetch', function (e) {
-  var u = new URL(e.request.url);
-  if (u.origin !== location.origin) return;
-  if (u.pathname === '/exhibition/' || u.pathname === '/exhibition') {
-    e.respondWith(fetch(e.request).then(function (r) { var copy = r.clone(); caches.open(C).then(function (c) { c.put('/exhibition/', copy); }); return r; }).catch(function () { return caches.match('/exhibition/'); }));
-  } else if (u.pathname === '/exhibition/poster.jpg') {
-    e.respondWith(caches.match('/exhibition/poster.jpg').then(function (r) { return r || fetch(e.request); }));
+  var req = e.request; if (req.method !== 'GET') return;
+  var u = new URL(req.url);
+  if (u.origin === location.origin) {
+    if (/^\/exhibition(\/about)?\/?$/.test(u.pathname)) { e.respondWith(networkFirst(req, pageKey(u))); return; }
+    if (u.pathname.indexOf('/_astro/') === 0) { e.respondWith(cacheFirst(req, false)); return; }
+    if (/^\/(img|fonts)\//.test(u.pathname) || u.pathname === '/apple-touch-icon.png' || u.pathname === '/exhibition/manifest.webmanifest') { e.respondWith(cacheFirst(req, true)); return; }
+    return;
   }
+  if (u.hostname === 'cdn.jsdelivr.net') e.respondWith(cacheFirst(req, true));   // 한글 서체(Pretendard) CSS · 글꼴 조각
 });
