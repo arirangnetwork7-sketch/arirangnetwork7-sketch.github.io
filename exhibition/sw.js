@@ -21,7 +21,9 @@ function networkFirst(req, key) {
     var timer = setTimeout(fallback, 4000);
     fetch(req).then(function (r) {
       if (r && r.ok) { var copy = r.clone(); caches.open(SHELL).then(function (c) { return c.put(key, copy); }).catch(function () {}); }
-      if (!done) { done = true; clearTimeout(timer); resolve(r); }
+      if (done) return;
+      if (r && r.ok) { done = true; clearTimeout(timer); resolve(r); return; }
+      clearTimeout(timer); fallback().then(function (h) { if (!done) { done = true; resolve(h || r); } });   // 서버가 잠시 오류(5xx · 배포 중 404)를 내면 저장본을 먼저
     }, function () {
       clearTimeout(timer);
       fallback().then(function (r) { if (!done) { done = true; resolve(r || Response.error()); } });
@@ -31,9 +33,9 @@ function networkFirst(req, key) {
 function cacheFirst(req, revalidate) {
   return caches.open(ASSETS).then(function (c) {
     return c.match(req).then(function (hit) {
-      var net = fetch(req).then(function (r) { if (r && (r.ok || r.type === 'opaque')) c.put(req, r.clone()).catch(function () {}); return r; });
-      if (hit) { if (revalidate) net.catch(function () {}); return hit; }
-      return net;
+      var get = function () { return fetch(req).then(function (r) { if (r && (r.ok || r.type === 'opaque')) c.put(req, r.clone()).catch(function () {}); return r; }); };
+      if (hit) { if (revalidate) get().catch(function () {}); return hit; }   // 저장본이 있으면 네트워크를 기다리지 않는다(그림 · 서체만 뒤에서 새로 받는다)
+      return get();
     });
   });
 }
