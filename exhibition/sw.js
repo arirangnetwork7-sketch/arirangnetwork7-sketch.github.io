@@ -42,7 +42,7 @@ self.addEventListener('fetch', function (e) {
   var req = e.request; if (req.method !== 'GET') return;
   var u = new URL(req.url);
   if (u.origin === location.origin) {
-    if (/^\/exhibition(\/about)?\/?$/.test(u.pathname)) { e.respondWith(networkFirst(req, pageKey(u))); return; }
+    if (/^\/exhibition(\/about)?\/?$/.test(u.pathname)) { if (req.mode === 'navigate') e.respondWith(networkFirst(req, pageKey(u))); return; }   // 페이지 이동만 저장본으로 받친다 — 재생 스크립트의 확인용 받기는 네트워크로 가야 '지금 넘어가도 되는가'를 바로 안다(감사 11-10)
     if (u.pathname.indexOf('/_astro/') === 0) { e.respondWith(cacheFirst(req, false)); return; }
     if (/^\/(img|fonts)\//.test(u.pathname) || u.pathname === '/apple-touch-icon.png' || u.pathname === '/exhibition/manifest.webmanifest') { e.respondWith(cacheFirst(req, true)); return; }
     return;
